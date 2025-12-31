@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>The Password Game (Unhinged Edition)</title>
+<script src="wordle.js"></script>
+<script src="stockfish.js"></script>
+<style>
+  body { background:#0f0f0f; color:#eee; font-family:Arial,sans-serif; padding:30px; }
+  h1 { margin-bottom:5px; }
+  input { width:100%; padding:12px; font-size:20px; margin-bottom:15px; }
+  select { margin-bottom:15px; padding:6px; background:#222; color:#eee; }
+  .rule { padding:6px; margin:4px 0; border-left:5px solid #444; }
+  .pass { color:#00ff88; border-color:#00ff88; }
+  .fail { color:#ff5555; border-color:#ff5555; }
+  .locked { opacity:0.4; }
+  .fire { animation: shake 0.15s infinite; color:orange; }
+  @keyframes shake { 0%{transform:translateX(0);}50%{transform:translateX(-3px);}100%{transform:translateX(3px);} }
+</style>
+</head>
+<body>
+<h1>🔐 The Password Game</h1>
+<p>Good luck. You will need it.</p>
+
+<label>🎨 Choose a totally normal font:</label><br>
+<select id="fontSelect"></select>
+<input id="password" placeholder="Enter your doomed password…" />
+<div id="rules"></div>
+
+<script>
+/* ================= FONT SYSTEM ================= */
+const passwordInput = document.getElementById("password");
+const rulesDiv = document.getElementById("rules");
+const fontSelect = document.getElementById("fontSelect");
+
+let fonts = [
+  "Arial","Verdana","Tahoma","Georgia","Garamond","Courier New",
+  "Comic Sans MS","Impact","Papyrus","Helvetica","Calibri",
+  "Optima","Candara","Wingdngs","TimesNewRoman","Webdings","Symbol"
+];
+while (fonts.length<100) fonts.push("Font "+Math.floor(Math.random()*999));
+fonts.sort(()=>Math.random()-0.5);
+fonts.forEach(f=>{
+  const opt=document.createElement("option");
+  opt.value=f; opt.textContent=f;
+  fontSelect.appendChild(opt);
+});
+fontSelect.addEventListener("change",()=>{
+  passwordInput.style.fontFamily=
+    fontSelect.value==="Wingdngs"?"Wingdings":
+    fontSelect.value==="TimesNewRoman"?"Times New Roman":
+    fontSelect.value;
+});
+
+/* ================= CHESS ENGINE ================= */
+let bestMove=null;
+const engine=Stockfish();
+engine.onmessage=e=>{
+  const msg=e.data||e;
+  if(msg.startsWith("bestmove")) bestMove=msg.split(" ")[1];
+};
+engine.postMessage("uci");
+engine.postMessage("position startpos");
+engine.postMessage("go depth 12");
+function chessMoveReadable(move){if(!move) return ""; return move.slice(0,2)+"-"+move.slice(2,4);}
+
+/* ================= RULES ================= */
+const rules=[
+  { text:"At least 5 characters", check:p=>p.length>=5 },
+  { text:"Contains a number", check:p=>/\d/.test(p) },
+  { text:"Contains uppercase letter", check:p=>/[A-Z]/.test(p) },
+  { text:"Contains special character", check:p=>/[^A-Za-z0-9]/.test(p) },
+  { text:"Digits add to 25", check:p=>[...p].filter(c=>/\d/.test(c)).reduce((a,b)=>a+ +b,0)===25 },
+  { text:"Includes a month", check:p=>/(january|february|march|april|may|june|july|august|september|october|november|december)/i.test(p) },
+  { text:"Includes Roman numeral", check:p=>/[IVXLCDM]/.test(p) },
+  { text:"Includes today's Wordle answer", check:p=>p.toLowerCase().includes(getTodayWordle()) },
+  { text:"Includes moon emoji", check:p=>/🌕|🌖|🌗|🌘|🌑|🌒|🌓|🌔/.test(p) },
+  { text:"Protect Paul 🥚", check:p=>p.includes("🥚") },
+  { text:"Password is on fire 🔥 PUT IT OUT", check:p=>!p.includes("🔥"), fire:true },
+  { text:"Includes the best chess move", check:p=>bestMove && p.includes(chessMoveReadable(bestMove)) }
+];
+
+/* ================= RENDER LOOP ================= */
+function render(){
+  const p=passwordInput.value;
+  rulesDiv.innerHTML="";
+  let unlocked=true;
+  rules.forEach((r,i)=>{
+    const div=document.createElement("div");
+    div.className="rule";
+    if(!unlocked){div.textContent=`🔒 Rule ${i+1}`; div.classList.add("locked"); rulesDiv.appendChild(div); return;}
+    const ok=r.check(p);
+    div.textContent=`Rule ${i+1}: ${r.text}`;
+    div.classList.add(ok?"pass":"fail");
+    if(r.fire && !ok) passwordInput.classList.add("fire");
+    else passwordInput.classList.remove("fire");
+    if(!ok) unlocked=false;
+    rulesDiv.appendChild(div);
+  });
+  if(unlocked){const win=document.createElement("h2"); win.textContent="🎉 YOU WIN (emotionally ruined)"; rulesDiv.appendChild(win);}
+}
+passwordInput.addEventListener("input",render);
+</script>
+</body>
+</html>
